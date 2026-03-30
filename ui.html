@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Day 4 — Rock Paper Scissors</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#0c0c0c;
+  --surface:#141414;
+  --surface2:#1e1e1e;
+  --border:#2a2a2a;
+  --text:#f0f0f0;
+  --muted:#555;
+  --rock:#ff4d4d;
+  --paper:#4daaff;
+  --scissors:#ffe14d;
+  --win:#39e580;
+  --loss:#ff4d4d;
+  --draw:#aaa;
+}
+
+html,body{
+  min-height:100vh;
+  background:var(--bg);
+  color:var(--text);
+  font-family:'IBM Plex Sans',sans-serif;
+  overflow-x:hidden;
+}
+
+/* scanline overlay */
+body::after{
+  content:'';
+  position:fixed;inset:0;
+  background:repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.07) 2px,
+    rgba(0,0,0,0.07) 4px
+  );
+  pointer-events:none;
+  z-index:1000;
+}
+
+/* background grid */
+body::before{
+  content:'';
+  position:fixed;inset:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size:32px 32px;
+  pointer-events:none;
+}
+
+/* ── LAYOUT ── */
+.wrap{
+  position:relative;z-index:1;
+  max-width:860px;margin:0 auto;
+  padding:2rem 1.5rem 4rem;
+  display:flex;flex-direction:column;
+  align-items:center;gap:2rem;
+}
+
+/* ── HEADER ── */
+.header{text-align:center}
+.day-tag{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;letter-spacing:3px;
+  text-transform:uppercase;color:var(--muted);
+  margin-bottom:10px;
+}
+h1{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:clamp(3.5rem,10vw,7rem);
+  letter-spacing:4px;
+  line-height:.9;
+  color:var(--text);
+}
+h1 .r{color:var(--rock)}
+h1 .p{color:var(--paper)}
+h1 .s{color:var(--scissors)}
+.sub{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:12px;color:var(--muted);
+  letter-spacing:2px;margin-top:10px;
+}
+
+/* ── SCOREBOARD ── */
+.scoreboard{
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  gap:0;
+  width:100%;
+  max-width:560px;
+  border:1px solid var(--border);
+  border-radius:4px;
+  overflow:hidden;
+  animation:fadeIn .5s ease both;
+}
+
+.score-side{
+  padding:1.5rem 1rem;
+  text-align:center;
+  background:var(--surface);
+}
+.score-side.you{ border-right:1px solid var(--border); }
+.score-side.cpu{ border-left:1px solid var(--border); }
+
+.score-label{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px;letter-spacing:3px;
+  text-transform:uppercase;color:var(--muted);
+  margin-bottom:8px;
+}
+.score-num{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:3.5rem;line-height:1;
+  transition:transform .2s,color .2s;
+}
+.score-side.you .score-num{color:var(--win)}
+.score-side.cpu .score-num{color:var(--loss)}
+
+.score-num.bump{animation:bump .3s ease}
+@keyframes bump{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+
+.score-mid{
+  background:var(--surface2);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:1rem 1.25rem;gap:4px;
+}
+.draws-val{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:1.8rem;color:var(--draw);
+}
+.draws-lbl{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:9px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--muted);
+}
+.round-num{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:9px;color:var(--muted);
+  margin-top:6px;
+}
+
+/* ── ARENA ── */
+.arena{
+  width:100%;max-width:560px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:2rem;
+  text-align:center;
+  min-height:180px;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:1rem;
+  position:relative;
+  overflow:hidden;
+}
+
+.arena::before{
+  content:'';
+  position:absolute;inset:0;
+  background:radial-gradient(ellipse at center, rgba(255,255,255,0.015), transparent 70%);
+  pointer-events:none;
+}
+
+.arena-idle{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:13px;color:var(--muted);
+  letter-spacing:1px;
+}
+
+.battle-row{
+  display:flex;align-items:center;justify-content:center;gap:2rem;
+  width:100%;
+}
+
+.fighter{
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+}
+
+.fighter-emoji{
+  font-size:4rem;
+  line-height:1;
+  animation:popIn .35s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+@keyframes popIn{from{opacity:0;transform:scale(0.4) rotate(-10deg)}to{opacity:1;transform:scale(1) rotate(0deg)}}
+
+.fighter-label{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--muted);
+}
+.fighter-choice{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:1.4rem;letter-spacing:1px;
+}
+
+.vs-divider{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:2rem;color:var(--border);
+  flex-shrink:0;
+}
+
+.result-text{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:2.8rem;
+  letter-spacing:3px;
+  animation:slideUp .35s cubic-bezier(0.34,1.56,0.64,1) both;
+  animation-delay:.2s;
+}
+@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+.result-win{color:var(--win)}
+.result-loss{color:var(--loss)}
+.result-draw{color:var(--draw)}
+
+.result-detail{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;color:var(--muted);
+  letter-spacing:1px;
+  animation:slideUp .3s ease both;
+  animation-delay:.35s;
+}
+
+/* ── CHOICES ── */
+.choices{
+  display:flex;gap:16px;flex-wrap:wrap;justify-content:center;
+  width:100%;max-width:560px;
+}
+
+.choice-btn{
+  flex:1;min-width:140px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:1.5rem 1rem;
+  cursor:pointer;
+  display:flex;flex-direction:column;
+  align-items:center;gap:10px;
+  transition:border-color .15s, transform .15s, background .15s;
+  position:relative;
+  overflow:hidden;
+}
+
+.choice-btn::before{
+  content:'';
+  position:absolute;bottom:0;left:0;right:0;
+  height:2px;
+  transition:opacity .15s;
+  opacity:0;
+}
+
+.choice-btn.rock::before{background:var(--rock)}
+.choice-btn.paper::before{background:var(--paper)}
+.choice-btn.scissors::before{background:var(--scissors)}
+
+.choice-btn:hover{
+  transform:translateY(-4px);
+  background:var(--surface2);
+}
+.choice-btn.rock:hover{border-color:var(--rock)}
+.choice-btn.paper:hover{border-color:var(--paper)}
+.choice-btn.scissors:hover{border-color:var(--scissors)}
+.choice-btn:hover::before{opacity:1}
+
+.choice-btn:active{transform:scale(0.96)}
+.choice-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+
+.choice-emoji{font-size:2.8rem;line-height:1}
+.choice-name{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:1.3rem;letter-spacing:2px;
+}
+.choice-btn.rock .choice-name{color:var(--rock)}
+.choice-btn.paper .choice-name{color:var(--paper)}
+.choice-btn.scissors .choice-name{color:var(--scissors)}
+
+.choice-hint{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:9px;letter-spacing:1px;color:var(--muted);
+}
+
+/* ── BOTTOM ROW ── */
+.bottom-row{
+  display:flex;gap:12px;
+  width:100%;max-width:560px;
+  justify-content:center;
+}
+
+.btn-reset{
+  background:none;
+  border:1px solid var(--border);
+  border-radius:4px;
+  color:var(--muted);
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;letter-spacing:2px;
+  padding:10px 20px;
+  cursor:pointer;
+  text-transform:uppercase;
+  transition:border-color .15s,color .15s;
+}
+.btn-reset:hover{border-color:var(--text);color:var(--text)}
+
+/* ── HISTORY ── */
+.history{
+  width:100%;max-width:560px;
+}
+.history-title{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px;letter-spacing:3px;
+  text-transform:uppercase;color:var(--muted);
+  margin-bottom:10px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--border);
+}
+.history-list{
+  display:flex;flex-direction:column;gap:4px;
+  max-height:200px;overflow-y:auto;
+}
+.history-list::-webkit-scrollbar{width:2px}
+.history-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+.history-item{
+  display:grid;
+  grid-template-columns:60px 1fr 1fr 80px;
+  align-items:center;gap:8px;
+  padding:6px 10px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:2px;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;
+  animation:slideIn .2s ease both;
+}
+@keyframes slideIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+
+.hi-round{color:var(--muted);font-size:10px}
+.hi-you{color:var(--text)}
+.hi-cpu{color:var(--muted)}
+.hi-result{
+  text-align:right;font-size:10px;letter-spacing:1px;
+  text-transform:uppercase;
+}
+.hi-win{color:var(--win)}
+.hi-loss{color:var(--loss)}
+.hi-draw{color:var(--draw)}
+
+/* ── STREAKS ── */
+.streak-bar{
+  display:flex;gap:4px;
+  width:100%;max-width:560px;
+  justify-content:center;
+  min-height:22px;
+}
+.streak-dot{
+  width:10px;height:10px;
+  border-radius:50%;
+  animation:popIn .2s ease both;
+}
+.streak-w{background:var(--win)}
+.streak-l{background:var(--loss)}
+.streak-d{background:var(--muted)}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+.shake{animation:shake .4s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+/* ── KEYBOARD HINTS ── */
+.kbd-hint{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px;color:var(--muted);
+  letter-spacing:1px;
+}
+.kbd{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:3px;
+  padding:1px 6px;
+  font-size:10px;
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="day-tag">Day 04 &nbsp;·&nbsp; 30 Days of Python</div>
+    <h1>
+      <span class="r">R</span>ock&nbsp;
+      <span class="p">P</span>aper&nbsp;
+      <span class="s">S</span>cissors
+    </h1>
+    <div class="sub">You vs The Machine</div>
+  </div>
+
+  <!-- Scoreboard -->
+  <div class="scoreboard">
+    <div class="score-side you">
+      <div class="score-label">You</div>
+      <div class="score-num" id="score-you">0</div>
+    </div>
+    <div class="score-mid">
+      <div class="draws-val" id="score-draws">0</div>
+      <div class="draws-lbl">Draws</div>
+      <div class="round-num" id="round-num">Round 0</div>
+    </div>
+    <div class="score-side cpu">
+      <div class="score-label">CPU</div>
+      <div class="score-num" id="score-cpu">0</div>
+    </div>
+  </div>
+
+  <!-- Streak bar -->
+  <div class="streak-bar" id="streak-bar"></div>
+
+  <!-- Arena -->
+  <div class="arena" id="arena">
+    <div class="arena-idle" id="arena-idle">Choose your weapon below</div>
+  </div>
+
+  <!-- Choice buttons -->
+  <div class="choices">
+    <button class="choice-btn rock" onclick="play('rock')">
+      <div class="choice-emoji">🪨</div>
+      <div class="choice-name">Rock</div>
+      <div class="choice-hint"><span class="kbd">R</span></div>
+    </button>
+    <button class="choice-btn paper" onclick="play('paper')">
+      <div class="choice-emoji">📄</div>
+      <div class="choice-name">Paper</div>
+      <div class="choice-hint"><span class="kbd">P</span></div>
+    </button>
+    <button class="choice-btn scissors" onclick="play('scissors')">
+      <div class="choice-emoji">✂️</div>
+      <div class="choice-name">Scissors</div>
+      <div class="choice-hint"><span class="kbd">S</span></div>
+    </button>
+  </div>
+
+  <!-- Bottom row -->
+  <div class="bottom-row">
+    <button class="btn-reset" onclick="resetGame()">Reset Score</button>
+  </div>
+  <div class="kbd-hint">Keyboard: <span class="kbd">R</span> Rock &nbsp; <span class="kbd">P</span> Paper &nbsp; <span class="kbd">S</span> Scissors</div>
+
+  <!-- History -->
+  <div class="history" id="history-section" style="display:none">
+    <div class="history-title">Round History</div>
+    <div class="history-list" id="history-list"></div>
+  </div>
+
+</div>
+
+<script>
+  const CHOICES = ['rock','paper','scissors'];
+  const WINS_AGAINST = { rock:'scissors', scissors:'paper', paper:'rock' };
+  const EMOJI = { rock:'🪨', paper:'📄', scissors:'✂️' };
+  const BEATS_MSG = { rock:'Rock crushes Scissors', paper:'Paper covers Rock', scissors:'Scissors cuts Paper' };
+
+  let score = {you:0, cpu:0, draws:0};
+  let rounds = 0;
+  let history = [];
+  let busy = false;
+
+  function cpuChoice() {
+    return CHOICES[Math.floor(Math.random() * 3)];
+  }
+
+  function getResult(player, cpu) {
+    if (player === cpu) return 'draw';
+    return WINS_AGAINST[player] === cpu ? 'win' : 'loss';
+  }
+
+  function play(player) {
+    if (busy) return;
+    busy = true;
+
+    const cpu    = cpuChoice();
+    const result = getResult(player, cpu);
+    rounds++;
+
+    // Update score
+    if      (result === 'win')  { score.you++;   }
+    else if (result === 'loss') { score.cpu++;   }
+    else                        { score.draws++; }
+
+    // Update displays
+    updateScoreboard(result);
+    renderArena(player, cpu, result);
+    addHistory(player, cpu, result, rounds);
+    updateStreak(result);
+
+    // Re-enable after short delay
+    setTimeout(() => { busy = false; }, 500);
+  }
+
+  function updateScoreboard(result) {
+    document.getElementById('round-num').textContent = `Round ${rounds}`;
+    document.getElementById('score-draws').textContent = score.draws;
+
+    const youEl = document.getElementById('score-you');
+    const cpuEl = document.getElementById('score-cpu');
+    youEl.textContent = score.you;
+    cpuEl.textContent = score.cpu;
+
+    if (result === 'win')  { youEl.classList.add('bump'); setTimeout(()=>youEl.classList.remove('bump'),400); }
+    if (result === 'loss') { cpuEl.classList.add('bump'); setTimeout(()=>cpuEl.classList.remove('bump'),400); }
+  }
+
+  function renderArena(player, cpu, result) {
+    const arena = document.getElementById('arena');
+    document.getElementById('arena-idle')?.remove();
+
+    const resultLabel = result === 'win' ? '— You Win! —' : result === 'loss' ? '— CPU Wins! —' : '— Draw! —';
+    const resultClass = result === 'win' ? 'result-win' : result === 'loss' ? 'result-loss' : 'result-draw';
+    const detail = result === 'draw' ? 'Great minds think alike' : BEATS_MSG[result === 'win' ? player : cpu];
+
+    arena.innerHTML = `
+      <div class="battle-row">
+        <div class="fighter">
+          <div class="fighter-label">You</div>
+          <div class="fighter-emoji">${EMOJI[player]}</div>
+          <div class="fighter-choice" style="color:var(--${player})">${player.toUpperCase()}</div>
+        </div>
+        <div class="vs-divider">VS</div>
+        <div class="fighter">
+          <div class="fighter-label">CPU</div>
+          <div class="fighter-emoji" style="animation-delay:.1s">${EMOJI[cpu]}</div>
+          <div class="fighter-choice" style="color:var(--${cpu})">${cpu.toUpperCase()}</div>
+        </div>
+      </div>
+      <div class="result-text ${resultClass}">${resultLabel}</div>
+      <div class="result-detail">${detail}</div>
+    `;
+
+    if (result === 'loss') arena.classList.add('shake');
+    setTimeout(() => arena.classList.remove('shake'), 400);
+  }
+
+  function addHistory(player, cpu, result, round) {
+    history.unshift({player, cpu, result, round});
+    if (history.length > 20) history.pop();
+
+    const section = document.getElementById('history-section');
+    const list    = document.getElementById('history-list');
+    section.style.display = 'block';
+
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    const resClass = result === 'win' ? 'hi-win' : result === 'loss' ? 'hi-loss' : 'hi-draw';
+    const resLabel = result === 'win' ? 'WIN' : result === 'loss' ? 'LOSS' : 'DRAW';
+    item.innerHTML = `
+      <span class="hi-round">#${round}</span>
+      <span class="hi-you">${EMOJI[player]} ${player}</span>
+      <span class="hi-cpu">${EMOJI[cpu]} ${cpu}</span>
+      <span class="hi-result ${resClass}">${resLabel}</span>
+    `;
+    list.prepend(item);
+  }
+
+  function updateStreak(result) {
+    const bar = document.getElementById('streak-bar');
+    const dot = document.createElement('div');
+    dot.className = `streak-dot ${result === 'win' ? 'streak-w' : result === 'loss' ? 'streak-l' : 'streak-d'}`;
+    dot.style.animationDelay = '0ms';
+    bar.appendChild(dot);
+
+    // Keep only last 20
+    while (bar.children.length > 20) bar.removeChild(bar.firstChild);
+  }
+
+  function resetGame() {
+    score = {you:0, cpu:0, draws:0};
+    rounds = 0;
+    history = [];
+
+    document.getElementById('score-you').textContent   = '0';
+    document.getElementById('score-cpu').textContent   = '0';
+    document.getElementById('score-draws').textContent = '0';
+    document.getElementById('round-num').textContent   = 'Round 0';
+    document.getElementById('streak-bar').innerHTML    = '';
+    document.getElementById('history-list').innerHTML  = '';
+    document.getElementById('history-section').style.display = 'none';
+
+    const arena = document.getElementById('arena');
+    arena.innerHTML = '<div class="arena-idle" id="arena-idle">Choose your weapon below</div>';
+  }
+
+  // Keyboard support
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    const map = { r:'rock', p:'paper', s:'scissors' };
+    if (map[e.key.toLowerCase()]) play(map[e.key.toLowerCase()]);
+  });
+</script>
+</body>
+</html>
