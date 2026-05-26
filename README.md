@@ -10,9 +10,9 @@ shows a full scoreboard after every round. A web UI version is also included.
 
 | File | Description |
 |---|---|
-| `day4_rock_paper_scissors.py` | Terminal version — run with Python |
-| `day4_ui.html` | Web UI version — open in browser |
-| `day4_README.md` | This file |
+| `rock_paper_scissors.py` | Terminal version — run with Python |
+| `ui.html` | Web UI version — open in browser |
+| `README.md` | This file |
 
 ## Concepts covered
 
